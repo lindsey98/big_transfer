@@ -152,6 +152,11 @@ class ResNetV2(nn.Module):
         ('conv', nn.Conv2d(2048*wf, head_size, kernel_size=1, bias=True)),
     ]))
 
+  def features(self, x):
+    x = self.head[:-1](self.body(self.root(x)))
+
+    return x.squeeze()
+
   def forward(self, x):
     x = self.head(self.body(self.root(x)))
     assert x.shape[-2:] == (1, 1)  # We should have no spatial shape left.

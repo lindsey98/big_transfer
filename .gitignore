@@ -1,2 +1,3 @@
+.vscode/
 *.npz
 __pycache__/
