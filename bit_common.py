@@ -33,6 +33,8 @@ def argparser(known_models):
                       help="Where to log training info (small).")
   parser.add_argument("--bit_pretrained_dir", default='.',
                       help="Where to search for pretrained BiT models.")
+  parser.add_argument("--weights_path",
+                      help="Load weights from a pretrained model, i.e. bit.pth.tar.")
 
   parser.add_argument("--dataset", choices=list(bit_hyperrule.known_dataset_sizes.keys()),
                       help="Choose the dataset. It should be easy to add your own! "

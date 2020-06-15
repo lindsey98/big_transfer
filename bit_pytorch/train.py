@@ -30,6 +30,8 @@ import bit_pytorch.models as models
 import bit_common
 import bit_hyperrule
 
+from .dataloader import GetLoader
+
 
 def topk(output, target, ks=(1,)):
   """Returns one boolean vector for each k, whether the target is within the output's top-k."""
@@ -71,6 +73,25 @@ def mktrainval(args, logger):
   elif args.dataset == "imagenet2012":
     train_set = tv.datasets.ImageFolder(pjoin(args.datadir, "train"), train_tx)
     valid_set = tv.datasets.ImageFolder(pjoin(args.datadir, "val"), val_tx)
+  # TODO: Define custom dataloading logic here for custom datasets
+  elif args.dataset == "logo_2k":
+    train_set = GetLoader(data_root='../data/',
+                          data_list='../data/train.txt',
+                          label_dict='../data/label_dict.pkl',
+                          transform=train_tx)
+    valid_set = GetLoader(data_root='../data/',
+                          data_list='../data/test.txt',
+                          label_dict='../data/label_dict.pkl',
+                          transform=val_tx)
+  elif args.dataset == "targetlist":
+    train_set = GetLoader(data_root='../targetlist/',
+                          data_list='../targetlist/train.txt',
+                          label_dict='../targetlist/label_dict.pkl',
+                          transform=train_tx)
+    valid_set = GetLoader(data_root='../targetlist/',
+                          data_list='../targetlist/test.txt',
+                          label_dict='../targetlist/label_dict.pkl',
+                          transform=val_tx)
   else:
     raise ValueError(f"Sorry, we have not spent time implementing the "
                      f"{args.dataset} dataset in the PyTorch codebase. "
@@ -83,6 +104,7 @@ def mktrainval(args, logger):
 
   logger.info(f"Using a training set with {len(train_set)} images.")
   logger.info(f"Using a validation set with {len(valid_set)} images.")
+  logger.info(f"Num of classes: {len(valid_set.classes)}")
 
   micro_batch_size = args.batch // args.batch_split
 
@@ -182,6 +204,15 @@ def main(args):
   # Note: no weight-decay!
   optim = torch.optim.SGD(model.parameters(), lr=0.003, momentum=0.9)
 
+  # If pretrained weights are specified
+  if args.weights_path:
+    logger.info(f"Loading weights from {args.weights_path}")
+    checkpoint = torch.load(args.weights_path, map_location="cpu")
+    # New task might have different classes; remove the pretrained classifier weights
+    del checkpoint['model']['module.head.conv.weight']
+    del checkpoint['model']['module.head.conv.bias']
+    model.load_state_dict(checkpoint["model"], strict=False)
+
   # Resume fine-tuning if we find a saved model.
   savename = pjoin(args.logdir, args.name, "bit.pth.tar")
   try:
@@ -279,8 +310,8 @@ def main(args):
 
 if __name__ == "__main__":
   parser = bit_common.argparser(models.KNOWN_MODELS.keys())
-  parser.add_argument("--datadir", required=True,
-                      help="Path to the ImageNet data folder, preprocessed for torchvision.")
+  # parser.add_argument("--datadir", required=True,
+  #                     help="Path to the ImageNet data folder, preprocessed for torchvision.")
   parser.add_argument("--workers", type=int, default=8,
                       help="Number of background threads used to load data.")
   parser.add_argument("--no-save", dest="save", action="store_false")
