@@ -7,11 +7,11 @@ from bit_pytorch.utils import read_txt
 import os
 import torch
 
-def recycle(iterable):
-  """Variant of itertools.cycle that does not save iterates."""
-  while True:
-    for i in iterable:
-      yield i
+# def recycle(iterable):
+#   """Variant of itertools.cycle that does not save iterates."""
+  # while True:
+  #   for i in iterable:
+      # yield i
 
 class GetLoader(data.Dataset):
     def __init__(self, img_folder, annot_path):
@@ -48,7 +48,7 @@ if __name__ == '__main__':
         train_set, batch_size=512, drop_last=False,
         sampler=torch.utils.data.RandomSampler(train_set, replacement=True, num_samples=512))
 
-    for x, y in recycle(train_loader):
+    for x, y in train_loader:
         x_arr = x.numpy()
         print(x)
         print(y)

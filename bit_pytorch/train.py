@@ -96,23 +96,13 @@ def mktrainval(args, logger):
   logger.info(f"Using a validation set with {len(valid_set)} images.")
   logger.info(f"Num of classes: {len(valid_set.classes)}")
 
-  micro_batch_size = args.batch // args.batch_split
-
   valid_loader = torch.utils.data.DataLoader(
-      valid_set, batch_size=micro_batch_size, shuffle=False,
+      valid_set, batch_size=512, shuffle=False,
       num_workers=args.workers, pin_memory=True, drop_last=False)
 
-  if micro_batch_size <= len(train_set):
-    train_loader = torch.utils.data.DataLoader(
-        train_set, batch_size=micro_batch_size, shuffle=True,
-        num_workers=args.workers, pin_memory=True, drop_last=False)
-  else:
-    # In the few-shot cases, the total dataset size might be smaller than the batch-size.
-    # In these cases, the default sampler doesn't repeat, so we need to make it do that
-    # if we want to match the behaviour from the paper.
-    train_loader = torch.utils.data.DataLoader(
-        train_set, batch_size=micro_batch_size, num_workers=args.workers, pin_memory=True,
-        sampler=torch.utils.data.RandomSampler(train_set, replacement=True, num_samples=micro_batch_size))
+  train_loader = torch.utils.data.DataLoader(
+      train_set, batch_size=args.batch, shuffle=True,
+      num_workers=args.workers, pin_memory=True, drop_last=False)
 
   return train_set, valid_set, train_loader, valid_loader
 
@@ -124,7 +114,8 @@ def run_eval(model, data_loader, device, logger, step):
   logger.info("Running validation...")
   logger.flush()
 
-  all_c, all_top1 = [], []
+  correct = 0
+  total = 0
   for b, (x, y) in enumerate(data_loader):
     with torch.no_grad():
       x = x.to(device, non_blocking=True, dtype=torch.float)
@@ -132,20 +123,15 @@ def run_eval(model, data_loader, device, logger, step):
 
       # compute output, measure accuracy and record loss.
       logits = model(x)
-      c = torch.nn.CrossEntropyLoss(reduction='none')(logits, y)
-      top1 = topk(logits, y)[0]
-      all_c.extend(c.cpu())  # Also ensures a sync point.
-      all_top1.extend(top1.cpu())
-
-    logger.info(f"Validation batch {b:d}, "
-                f"Validation@{step} loss {np.mean(all_c):.5f}, "
-                f"top1 {np.mean(all_top1):.2%}, ")
+      preds = torch.argmax(logits, dim=1)
+      correct += preds.eq(y).sum()
+      total += len(logits)
+      print(float(correct/total))
 
   model.train()
-  logger.info(f"Validation@{step} loss {np.mean(all_c):.5f}, "
-              f"top1 {np.mean(all_top1):.2%}, ")
+  logger.info(f"top1 {float(correct/total):.2%}, ")
   logger.flush()
-  return all_c, all_top1
+  return float(correct/total)
 
 
 def mixup_data(x, y, l):
@@ -171,7 +157,7 @@ def main(args):
   logger.info(f"Going to train on {device}")
 
   train_set, valid_set, train_loader, valid_loader = mktrainval(args, logger)
-  print(len(valid_loader))
+  # print(""len(valid_loader))
   model = models.KNOWN_MODELS[args.model](head_size=len(valid_set.classes), zero_head=True)
 
   step = 0
@@ -209,14 +195,11 @@ def main(args):
   cri = torch.nn.CrossEntropyLoss().to(device)
 
   logger.info("Starting training!")
-  accum_steps = 0
 
   with lb.Uninterrupt() as u:
     for x, y in recycle(train_loader):
 
       # Schedule sending to GPU(s)
-      print(x.shape)
-      print(y.shape)
       x = x.to(device, non_blocking=True, dtype=torch.float)
       y = y.to(device, non_blocking=True, dtype=torch.long)
 
@@ -232,53 +215,46 @@ def main(args):
       c = cri(logits, y)
       c_num = float(c.data.cpu().numpy())  # Also ensures a sync point.
 
-      # Accumulate grads
-      (c / args.batch_split).backward()
-      accum_steps += 1
+      # BP
+      optim.zero_grad()
+      c.backward()
+      optim.step()
+      step += 1
 
-      accstep = f" ({accum_steps}/{args.batch_split})" if args.batch_split > 1 else ""
-      logger.info(f"[step {step}{accstep}]: loss={c_num:.5f} (lr={lr})")  # pylint: disable=logging-format-interpolation
+      # write
+      logger.info(f"[step {step}]: loss={c_num:.5f} (lr={lr})")  # pylint: disable=logging-format-interpolation
       logger.flush()
       # ...log the running loss
-      writer.add_scalar('training_loss',  c_num, accum_steps)
-      writer.close()
-      writer.add_histogram('model.fc1.weights', model.fc1.weight.data, accum_steps)
-      writer.close()
-      writer.add_histogram('model.fc2.weights', model.fc2.weight.data, accum_steps)
-      writer.close()
-      writer.add_histogram('model.fc1.grad', model.fc1.weight.grad.data, accum_steps)
-      writer.close()
-      writer.add_histogram('model.fc2.grad', model.fc2.weight.grad.data, accum_steps)
-      writer.close()
+      writer.add_scalar('training_loss',  c_num, step)
+      writer.flush()
+      writer.add_histogram('model.fc1.weights', model.fc1.weight.data,step)
+      writer.flush()
+      writer.add_histogram('model.fc2.weights', model.fc2.weight.data, step)
+      writer.flush()
+      writer.add_histogram('model.fc1.grad', model.fc1.weight.grad.data, step)
+      writer.flush()
+      writer.add_histogram('model.fc2.grad', model.fc2.weight.grad.data, step)
+      writer.flush()
 
-      # Update params
-      if accum_steps == args.batch_split:
-        optim.step()
-        optim.zero_grad()
-        step += 1
-        accum_steps = 0
+      # get train_acc
+      correct_rate = run_eval(model, valid_loader, device, logger, step)  # TODO: Final eval at end of training.
+      writer.add_scalar('train_top1_acc', correct_rate, step)
+      writer.flush()
 
-        # Run evaluation and save the model.
-        if args.eval_every and step % args.eval_every == 0:
-          _, eval_all_top1 = run_eval(model, valid_loader, device, logger, step)  # TODO: Final eval at end of training.
-          writer.add_scalar('eval_top1_acc', np.mean(eval_all_top1), step)
-          writer.close()
-          if args.save:
-            torch.save({
-                "step": step,
-                "model": model.state_dict(),
-                "optim" : optim.state_dict(),
-            }, savename)
+      # save model
+      torch.save({
+        "step": step,
+        "model": model.state_dict(),
+        "optim": optim.state_dict(),
+      }, savename)
+
 
     # TODO: Final eval at end of training.
     # run_eval(model, valid_loader, device, logger, step='end')
 
 
-
 if __name__ == "__main__":
   parser = bit_common.argparser(models.KNOWN_MODELS.keys())
-  # parser.add_argument("--datadir", required=True,
-  #                     help="Path to the ImageNet data folder, preprocessed for torchvision.")
   parser.add_argument("--workers", type=int, default=0,
                       help="Number of background threads used to load data.")
   parser.add_argument("--no-save", dest="save", action="store_false")
