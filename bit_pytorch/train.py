@@ -121,10 +121,10 @@ def run_eval(model, data_loader, device, logger, step):
       x = x.to(device, non_blocking=True, dtype=torch.float)
       y = y.to(device, non_blocking=True, dtype=torch.long)
 
-      # compute output, measure accuracy and record loss.
+      # compute output, measure accuracy
       logits = model(x)
       preds = torch.argmax(logits, dim=1)
-      correct += preds.eq(y).sum()
+      correct += preds.eq(y).sum().item()
       total += len(logits)
       print(float(correct/total))
 
@@ -190,7 +190,6 @@ def main(args):
 
   model = model.to(device)
   optim.zero_grad()
-
   model.train()
   cri = torch.nn.CrossEntropyLoss().to(device)
 
