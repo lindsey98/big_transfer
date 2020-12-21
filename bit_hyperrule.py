@@ -27,7 +27,7 @@ known_dataset_sizes = {
   # TODO: Specify image size of custom dataset here
   'logo_2k': (95, 95),
   'targetlist': (95, 95),
-  'web':(20, 20),
+  'web':(10, 10),
 }
 
 
@@ -43,6 +43,8 @@ def get_mixup(dataset_size):
 
 # Not used
 def get_schedule(dataset_size):
+  if dataset_size < 5000:
+    return [50, 100, 150, 200, 250]
   if dataset_size < 20_000:
     return [100, 200, 300, 400, 500]
   elif dataset_size < 500_000:

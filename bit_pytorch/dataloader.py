@@ -42,11 +42,13 @@ class GetLoader(data.Dataset):
         return self.num_imgs
 
 if __name__ == '__main__':
-    train_set = GetLoader(img_folder='./data/first_round_3k3k/credential', annot_path='./data/first_round_3k3k/all_coords.txt')
+    train_set = GetLoader(img_folder='./data/first_round_3k3k/all_imgs',
+                          annot_path='./data/first_round_3k3k/all_coords.txt')
     train_loader = torch.utils.data.DataLoader(
         train_set, batch_size=512, drop_last=False,
         sampler=torch.utils.data.RandomSampler(train_set, replacement=True, num_samples=512))
 
     for x, y in recycle(train_loader):
-        print(x.shape)
-        print(y.shape)
+        x_arr = x.numpy()
+        print(x)
+        print(y)

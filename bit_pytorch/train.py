@@ -32,7 +32,8 @@ import bit_common
 import bit_hyperrule
 
 from .dataloader import GetLoader
-
+from torch.utils.tensorboard import SummaryWriter
+import os
 
 def topk(output, target, ks=(1,)):
   """Returns one boolean vector for each k, whether the target is within the output's top-k."""
@@ -116,44 +117,35 @@ def mktrainval(args, logger):
   return train_set, valid_set, train_loader, valid_loader
 
 
-def run_eval(model, data_loader, device, chrono, logger, step):
+def run_eval(model, data_loader, device, logger, step):
   # switch to evaluate mode
   model.eval()
 
   logger.info("Running validation...")
   logger.flush()
 
-  # all_c, all_top1, all_top5 = [], [], []
   all_c, all_top1 = [], []
-  end = time.time()
   for b, (x, y) in enumerate(data_loader):
     with torch.no_grad():
       x = x.to(device, non_blocking=True, dtype=torch.float)
       y = y.to(device, non_blocking=True, dtype=torch.long)
 
-      # measure data loading time
-      chrono._done("eval load", time.time() - end)
-
       # compute output, measure accuracy and record loss.
-      with chrono.measure("eval fprop"):
-        logits = model(x)
-        c = torch.nn.CrossEntropyLoss(reduction='none')(logits, y)
-        # top1, top5 = topk(logits, y, ks=(1, 5))
-        top1 = topk(logits, y)
-        all_c.extend(c.cpu())  # Also ensures a sync point.
-        all_top1.extend(top1.cpu())
-        # all_top5.extend(top5.cpu())
+      logits = model(x)
+      c = torch.nn.CrossEntropyLoss(reduction='none')(logits, y)
+      top1 = topk(logits, y)[0]
+      all_c.extend(c.cpu())  # Also ensures a sync point.
+      all_top1.extend(top1.cpu())
 
-    # measure elapsed time
-    end = time.time()
+    logger.info(f"Validation batch {b:d}, "
+                f"Validation@{step} loss {np.mean(all_c):.5f}, "
+                f"top1 {np.mean(all_top1):.2%}, ")
 
   model.train()
   logger.info(f"Validation@{step} loss {np.mean(all_c):.5f}, "
               f"top1 {np.mean(all_top1):.2%}, ")
-              # f"top5 {np.mean(all_top5):.2%}")
   logger.flush()
   return all_c, all_top1
-  # return all_c, all_top1, all_top5
 
 
 def mixup_data(x, y, l):
@@ -164,12 +156,11 @@ def mixup_data(x, y, l):
   y_a, y_b = y, y[indices]
   return mixed_x, y_a, y_b
 
-
 def mixup_criterion(criterion, pred, y_a, y_b, l):
   return l * criterion(pred, y_a) + (1 - l) * criterion(pred, y_b)
 
-
 def main(args):
+  writer = SummaryWriter(os.path.join(args.logdir, args.name, 'tensorboard_write'))
   logger = bit_common.setup_logger(args)
 
   # Lets cuDNN benchmark conv implementations and choose the fastest.
@@ -180,22 +171,12 @@ def main(args):
   logger.info(f"Going to train on {device}")
 
   train_set, valid_set, train_loader, valid_loader = mktrainval(args, logger)
-
-  # logger.info(f"Loading model from {args.model}.npz")
+  print(len(valid_loader))
   model = models.KNOWN_MODELS[args.model](head_size=len(valid_set.classes), zero_head=True)
-  # model.load_from(np.load(f"{args.model}.npz"))
 
-  # logger.info("Moving model onto all GPUs")
-  # model = torch.nn.DataParallel(model)
-
-  # Optionally resume from a checkpoint.
-  # Load it to CPU first as we'll move the model to GPU later.
-  # This way, we save a little bit of GPU memory when loading.
   step = 0
-
   # Note: no weight-decay!
   optim = torch.optim.SGD(model.parameters(), lr=0.003, momentum=0.9)
-
   # If pretrained weights are specified
   if args.weights_path:
     # logger.info(f"Loading weights from {args.weights_path}")
@@ -225,22 +206,13 @@ def main(args):
   optim.zero_grad()
 
   model.train()
-  # mixup = bit_hyperrule.get_mixup(len(train_set))
   cri = torch.nn.CrossEntropyLoss().to(device)
 
   logger.info("Starting training!")
-  chrono = lb.Chrono()
   accum_steps = 0
-  # mixup_l = np.random.beta(mixup, mixup) if mixup > 0 else 1
-  end = time.time()
 
   with lb.Uninterrupt() as u:
     for x, y in recycle(train_loader):
-      # measure data loading time, which is spent in the `for` statement.
-      chrono._done("load", time.time() - end)
-
-      if u.interrupted:
-        break
 
       # Schedule sending to GPU(s)
       print(x.shape)
@@ -255,40 +227,36 @@ def main(args):
       for param_group in optim.param_groups:
         param_group["lr"] = lr
 
-      # if mixup > 0.0:
-      #   x, y_a, y_b = mixup_data(x, y, mixup_l)
-
       # compute output
-      with chrono.measure("fprop"):
-        logits = model(x)
-        # if mixup > 0.0:
-        #   c = mixup_criterion(cri, logits, y_a, y_b, mixup_l)
-        # else:
-        c = cri(logits, y)
-        c_num = float(c.data.cpu().numpy())  # Also ensures a sync point.
+      logits = model(x)
+      c = cri(logits, y)
+      c_num = float(c.data.cpu().numpy())  # Also ensures a sync point.
 
       # Accumulate grads
-      with chrono.measure("grads"):
-        (c / args.batch_split).backward()
-        accum_steps += 1
+      (c / args.batch_split).backward()
+      accum_steps += 1
 
       accstep = f" ({accum_steps}/{args.batch_split})" if args.batch_split > 1 else ""
       logger.info(f"[step {step}{accstep}]: loss={c_num:.5f} (lr={lr})")  # pylint: disable=logging-format-interpolation
       logger.flush()
+      # ...log the running loss
+      writer.add_scalar('training_loss',  c_num, accum_steps)
+      writer.add_histogram('model.fc1.weights', model.fc1.weight.data, accum_steps)
+      writer.add_histogram('model.fc2.weights', model.fc2.weight.data, accum_steps)
+      writer.add_histogram('model.fc1.grad', model.fc1.weight.grad.data, accum_steps)
+      writer.add_histogram('model.fc2.grad', model.fc2.weight.grad.data, accum_steps)
 
       # Update params
       if accum_steps == args.batch_split:
-        with chrono.measure("update"):
-          optim.step()
-          optim.zero_grad()
+        optim.step()
+        optim.zero_grad()
         step += 1
         accum_steps = 0
-        # Sample new mixup ratio for next batch
-        # mixup_l = np.random.beta(mixup, mixup) if mixup > 0 else 1
 
         # Run evaluation and save the model.
         if args.eval_every and step % args.eval_every == 0:
-          run_eval(model, valid_loader, device, chrono, logger, step)  # TODO: Final eval at end of training.
+          _, eval_all_top1 = run_eval(model, valid_loader, device, logger, step)  # TODO: Final eval at end of training.
+          writer.add_scalar('eval_top1_acc', np.mean(eval_all_top1), step)
           if args.save:
             torch.save({
                 "step": step,
@@ -296,12 +264,9 @@ def main(args):
                 "optim" : optim.state_dict(),
             }, savename)
 
-      end = time.time()
-
     # TODO: Final eval at end of training.
-    # run_eval(model, valid_loader, device, chrono, logger, step='end')
+    # run_eval(model, valid_loader, device, logger, step='end')
 
-  logger.info(f"Timings:\n{chrono}")
 
 
 if __name__ == "__main__":

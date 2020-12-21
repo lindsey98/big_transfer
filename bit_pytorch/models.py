@@ -206,7 +206,7 @@ class CNNCustomize(nn.Module):
     self.zero_head = zero_head
     self.head = nn.Sequential(OrderedDict([
         ('flatten', Flatten()),
-        ('fc1', nn.Linear(32*20*20, 32)),
+        ('fc1', nn.Linear(32*10*10, 32)),
         ('fc2', nn.Linear(32, head_size))
     ]))
 
@@ -214,7 +214,23 @@ class CNNCustomize(nn.Module):
     x = self.head(self.body(self.stem(x)))
     return x
 
+class FCCustomize(nn.Module):
+    def __init__(self, input_ch_size=9, head_size=21843, zero_head=False):
+        super(FCCustomize, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=input_ch_size, out_channels=6, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=6, out_channels=8, kernel_size=3, padding=1)
+        self.fc1 = nn.Linear(8 * 10 * 10, 64)
+        self.fc2 = nn.Linear(64, 32)
+        self.fc3 = nn.Linear(32, head_size)
 
+    def forward(self, x):
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+        x = x.view(-1, 8 * 10 * 10)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
 KNOWN_MODELS = OrderedDict([
     ('BiT-M-R50x1', lambda *a, **kw: ResNetV2([3, 4, 6, 3], 1, *a, **kw)),
@@ -229,11 +245,13 @@ KNOWN_MODELS = OrderedDict([
     ('BiT-S-R101x3', lambda *a, **kw: ResNetV2([3, 4, 23, 3], 3, *a, **kw)),
     ('BiT-S-R152x2', lambda *a, **kw: ResNetV2([3, 8, 36, 3], 2, *a, **kw)),
     ('BiT-S-R152x4', lambda *a, **kw: ResNetV2([3, 8, 36, 3], 4, *a, **kw)),
-    ('CNN', lambda *a, **kw: CNNCustomize(*a, **kw))
+    ('CNN', lambda *a, **kw: CNNCustomize(*a, **kw)),
+    ('FC', lambda *a, **kw: FCCustomize(*a, **kw))
 ])
 
 if __name__ == '__main__':
     from torchsummary import summary
-    model = KNOWN_MODELS['CNN'](head_size=2, zero_head=True)
+    model = KNOWN_MODELS['FC'](head_size=2, zero_head=True)
     model.to('cuda:0')
-    summary(model, (9, 20, 20))
+    print(model.fc1.weight.data)
+    # summary(model, (9, 20, 20))
