@@ -241,10 +241,15 @@ def main(args):
       logger.flush()
       # ...log the running loss
       writer.add_scalar('training_loss',  c_num, accum_steps)
+      writer.close()
       writer.add_histogram('model.fc1.weights', model.fc1.weight.data, accum_steps)
+      writer.close()
       writer.add_histogram('model.fc2.weights', model.fc2.weight.data, accum_steps)
+      writer.close()
       writer.add_histogram('model.fc1.grad', model.fc1.weight.grad.data, accum_steps)
+      writer.close()
       writer.add_histogram('model.fc2.grad', model.fc2.weight.grad.data, accum_steps)
+      writer.close()
 
       # Update params
       if accum_steps == args.batch_split:
@@ -257,6 +262,7 @@ def main(args):
         if args.eval_every and step % args.eval_every == 0:
           _, eval_all_top1 = run_eval(model, valid_loader, device, logger, step)  # TODO: Final eval at end of training.
           writer.add_scalar('eval_top1_acc', np.mean(eval_all_top1), step)
+          writer.close()
           if args.save:
             torch.save({
                 "step": step,

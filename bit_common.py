@@ -45,11 +45,11 @@ def argparser(known_models):
   parser.add_argument("--examples_per_class_seed", type=int, default=0,
                       help="Random seed for selecting examples.")
 
-  parser.add_argument("--batch", type=int, default=512,
+  parser.add_argument("--batch", type=int, default=256,
                       help="Batch size.")
   parser.add_argument("--batch_split", type=int, default=1,
                       help="Number of batches to compute gradient on before updating weights.")
-  parser.add_argument("--base_lr", type=float, default=0.003,
+  parser.add_argument("--base_lr", type=float, default=0.001,
                       help="Base learning-rate for fine-tuning. Most likely default is best.")
   parser.add_argument("--eval_every", type=int, default=None,
                       help="Run prediction on validation set every so many steps."
