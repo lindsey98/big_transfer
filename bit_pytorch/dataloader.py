@@ -2,56 +2,44 @@ import torch.utils.data as data
 from PIL import Image, ImageOps
 import pickle
 import numpy as np
+from bit_pytorch.grid_divider import read_img
+from bit_pytorch.utils import read_txt
+import os
 
 
 class GetLoader(data.Dataset):
-    def __init__(self, data_root, data_list, label_dict, transform=None, grayscale=False):
+    def __init__(self, img_folder, annot_path, transform=None):
         self.transform = transform
-        self.data_root = data_root
-        self.grayscale = grayscale
-       # print(self.data_root)
-        f = open(data_list, 'r')
-        data_list = f.readlines()
-        f.close()
-
-        with open(label_dict, 'rb') as handle:
-            self.label_dict = pickle.load(handle)
-
-        self.classes = list(self.label_dict.keys())
-
-        self.n_data = len(data_list)
-
-        self.img_paths = []
-        self.labels = []
-
-        for data in data_list:
-            image_path = data.rstrip('\n')
-            label = image_path.split('/')[0]
-            self.img_paths.append(image_path)
-            self.labels.append(label)
+        self.img_folder = img_folder
+        self.annot_path = annot_path
+        self.labels, self.paths, self.preprocess_coordinates, self.classes = read_txt(annot_path)
 
     def __getitem__(self, item):
 
-     #   print(self.data_root)
-        img_path, label= self.img_paths[item], self.labels[item]
-        #img_path_full = os.path.join(self.data_root, img_path)
-        img_path_full = self.data_root+img_path
-      #  print(img_path_full)
-        if self.grayscale:
-            img = Image.open(img_path_full).convert('L').convert('RGB')
-        else:
-            img = Image.open(img_path_full).convert('RGB')
+        image_file = os.listdir(self.img_folder)[item]
+        img_coords = np.asarray(self.preprocess_coordinates)[np.asarray(self.paths) == image_file.split('.png')[0]]
+        img_classes = np.asarray(self.classes)[np.asarray(self.paths) == image_file.split('.png')[0]]
+        img_label = np.asarray(self.labels)[np.asarray(self.paths) == image_file.split('.png')[0]][0]
 
-        img = ImageOps.expand(img, (
-        (max(img.size) - img.size[0]) // 2, (max(img.size) - img.size[1]) // 2,
-        (max(img.size) - img.size[0]) // 2, (max(img.size) - img.size[1]) // 2), fill=(255, 255, 255))
+        if len(img_label) == 0:
+            raise IndexError('list index out of range')
 
-        # label = np.array(label,dtype='float32')
-        label = self.label_dict[label]
+        grid_arr = read_img(img_path=os.path.join(self.img_folder, image_file),
+                            coords=img_coords,
+                            classes=img_classes)
+
+
         if self.transform is not None:
-            img = self.transform(img)
+            grid_arr = self.transform(grid_arr)
 
-        return img, label
+        return grid_arr, img_label
 
     def __len__(self):
-        return self.n_data
+        return len(os.listdir(self.img_folder))
+
+if __name__ == '__main__':
+    data_loader = GetLoader(img_folder='./data/first_round_3k3k/credential', annot_path='./data/first_round_3k3k/all_coords.txt')
+    grid_arr, img_label = data_loader.__getitem__(2999)
+    print(len(data_loader))
+    print(grid_arr)
+    print(img_label)

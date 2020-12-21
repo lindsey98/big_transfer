@@ -52,14 +52,14 @@ def mktrainval(args, logger):
   """Returns train and validation datasets."""
   precrop, crop = bit_hyperrule.get_resolution_from_dataset(args.dataset)
   train_tx = tv.transforms.Compose([
-      tv.transforms.Resize((precrop, precrop)),
-      tv.transforms.RandomCrop((crop, crop)),
-      tv.transforms.RandomHorizontalFlip(),
+      # tv.transforms.Resize((precrop, precrop)),
+      # tv.transforms.RandomCrop((crop, crop)),
+      # tv.transforms.RandomHorizontalFlip(),
       tv.transforms.ToTensor(),
       tv.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
   ])
   val_tx = tv.transforms.Compose([
-      tv.transforms.Resize((crop, crop)),
+      # tv.transforms.Resize((crop, crop)),
       tv.transforms.ToTensor(),
       tv.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
   ])
@@ -74,23 +74,13 @@ def mktrainval(args, logger):
     train_set = tv.datasets.ImageFolder(pjoin(args.datadir, "train"), train_tx)
     valid_set = tv.datasets.ImageFolder(pjoin(args.datadir, "val"), val_tx)
   # TODO: Define custom dataloading logic here for custom datasets
-  elif args.dataset == "logo_2k":
-    train_set = GetLoader(data_root='../data/',
-                          data_list='../data/train.txt',
-                          label_dict='../data/label_dict.pkl',
+  elif args.dataset == "web":
+    train_set = GetLoader(img_folder='./data/first_round_3k3k/credential',
+                          annot_path='./data/first_round_3k3k/all_coords.txt',
                           transform=train_tx)
-    valid_set = GetLoader(data_root='../data/',
-                          data_list='../data/test.txt',
-                          label_dict='../data/label_dict.pkl',
-                          transform=val_tx)
-  elif args.dataset == "targetlist":
-    train_set = GetLoader(data_root='../targetlist/',
-                          data_list='../targetlist/train.txt',
-                          label_dict='../targetlist/label_dict.pkl',
-                          transform=train_tx)
-    valid_set = GetLoader(data_root='../targetlist/',
-                          data_list='../targetlist/test.txt',
-                          label_dict='../targetlist/label_dict.pkl',
+
+    valid_set = GetLoader(img_folder='./data/first_round_3k3k/credential',
+                          annot_path='./data/first_round_3k3k/all_coords.txt',
                           transform=val_tx)
   else:
     raise ValueError(f"Sorry, we have not spent time implementing the "
