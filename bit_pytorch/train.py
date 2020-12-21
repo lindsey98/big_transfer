@@ -195,6 +195,13 @@ def main(args):
 
   logger.info("Starting training!")
 
+  # get initial train_acc
+  correct_rate = run_eval(model, valid_loader, device, logger, 0)
+  logger.info(f"[Initial training accuracy {correct_rate}]")
+  logger.flush()
+  writer.add_scalar('train_top1_acc', correct_rate, 0)
+  writer.flush()
+
   with lb.Uninterrupt() as u:
     for x, y in recycle(train_loader):
 
@@ -236,16 +243,17 @@ def main(args):
       writer.flush()
 
       # get train_acc
-      correct_rate = run_eval(model, valid_loader, device, logger, step)  # TODO: Final eval at end of training.
-      writer.add_scalar('train_top1_acc', correct_rate, step)
-      writer.flush()
+      if step % 5 == 0:
+          correct_rate = run_eval(model, valid_loader, device, logger, step)  # TODO: Final eval at end of training.
+          writer.add_scalar('train_top1_acc', correct_rate, step)
+          writer.flush()
 
-      # save model
-      torch.save({
-        "step": step,
-        "model": model.state_dict(),
-        "optim": optim.state_dict(),
-      }, savename)
+          # save model
+          torch.save({
+            "step": step,
+            "model": model.state_dict(),
+            "optim": optim.state_dict(),
+          }, savename)
 
 
     # TODO: Final eval at end of training.
