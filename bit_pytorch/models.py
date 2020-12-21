@@ -16,7 +16,6 @@
 """Bottleneck ResNet v2 with GroupNorm and Weight Standardization."""
 
 from collections import OrderedDict  # pylint: disable=g-importing-member
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -178,6 +177,44 @@ class ResNetV2(nn.Module):
         for uname, unit in block.named_children():
           unit.load_from(weights, prefix=f'{prefix}{bname}/{uname}/')
 
+class Flatten(torch.nn.Module):
+    def forward(self, x):
+        batch_size = x.shape[0]
+        return x.view(batch_size, -1)
+
+class CNNCustomize(nn.Module):
+  """Implementation of Pre-activation (v2) ResNet mode."""
+
+  def __init__(self, input_ch_size=9, head_size=21843, zero_head=False):
+    super().__init__()
+
+    self.stem = nn.Sequential(OrderedDict([
+        ('pre_conv', StdConv2d(input_ch_size, 3, kernel_size=1, stride=1, padding=0, bias=False)),
+    ]))
+
+    # The following will be unreadable if we split lines.
+    # pylint: disable=line-too-long
+    self.body = nn.Sequential(OrderedDict([
+        ('conv1', StdConv2d(3, 8, kernel_size=3, stride=1, padding=1, bias=False)),
+        ('relu1', nn.ReLU(inplace=True)),
+        ('conv2', StdConv2d(8, 16, kernel_size=3, stride=1, padding=1, bias=False)),
+        ('relu2', nn.ReLU(inplace=True)),
+        ('conv3', StdConv2d(16, 32, kernel_size=3, stride=1, padding=1, bias=False)),
+        ('relu3', nn.ReLU(inplace=True))
+    ]))
+
+    self.zero_head = zero_head
+    self.head = nn.Sequential(OrderedDict([
+        ('flatten', Flatten()),
+        ('fc1', nn.Linear(32*20*20, 32)),
+        ('fc2', nn.Linear(32, head_size))
+    ]))
+
+  def forward(self, x):
+    x = self.head(self.body(self.stem(x)))
+    return x
+
+
 
 KNOWN_MODELS = OrderedDict([
     ('BiT-M-R50x1', lambda *a, **kw: ResNetV2([3, 4, 6, 3], 1, *a, **kw)),
@@ -192,4 +229,11 @@ KNOWN_MODELS = OrderedDict([
     ('BiT-S-R101x3', lambda *a, **kw: ResNetV2([3, 4, 23, 3], 3, *a, **kw)),
     ('BiT-S-R152x2', lambda *a, **kw: ResNetV2([3, 8, 36, 3], 2, *a, **kw)),
     ('BiT-S-R152x4', lambda *a, **kw: ResNetV2([3, 8, 36, 3], 4, *a, **kw)),
+    ('CNN', lambda *a, **kw: CNNCustomize(*a, **kw))
 ])
+
+if __name__ == '__main__':
+    from torchsummary import summary
+    model = KNOWN_MODELS['CNN'](head_size=2, zero_head=True)
+    model.to('cuda:0')
+    summary(model, (9, 20, 20))

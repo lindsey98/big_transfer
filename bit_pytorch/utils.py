@@ -28,6 +28,7 @@ def read_txt(txt_file: str):
 
     contents = [x.strip() for x in open(txt_file).readlines()]
     paths = [x.split('\t')[0] for x in contents]
+    num_imgs = len(set(paths))
     classes = [x.split('\t')[2] for x in contents]
     labels = [x.split('\t')[-1] for x in contents]
     coordinates = [x.split('\t')[1] for x in contents]
@@ -38,4 +39,4 @@ def read_txt(txt_file: str):
         preprocess_coordinates.append([x1, y1, x2, y2])
 
     assert (len(preprocess_coordinates) == len(classes)) & (len(paths) == len(preprocess_coordinates)) & (len(labels) == len(classes))
-    return labels, paths, preprocess_coordinates, classes
+    return num_imgs, labels, paths, preprocess_coordinates, classes

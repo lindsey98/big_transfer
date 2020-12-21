@@ -23,6 +23,7 @@ import numpy as np
 import torch
 import torchvision as tv
 
+
 import bit_pytorch.fewshot as fs
 import bit_pytorch.lbtoolbox as lb
 import bit_pytorch.models as models
@@ -56,14 +57,13 @@ def mktrainval(args, logger):
       # tv.transforms.RandomCrop((crop, crop)),
       # tv.transforms.RandomHorizontalFlip(),
       tv.transforms.ToTensor(),
-      tv.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+      # tv.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
   ])
   val_tx = tv.transforms.Compose([
       # tv.transforms.Resize((crop, crop)),
       tv.transforms.ToTensor(),
-      tv.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+      # tv.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
   ])
-
   if args.dataset == "cifar10":
     train_set = tv.datasets.CIFAR10(args.datadir, transform=train_tx, train=True, download=True)
     valid_set = tv.datasets.CIFAR10(args.datadir, transform=val_tx, train=False, download=True)
@@ -73,15 +73,14 @@ def mktrainval(args, logger):
   elif args.dataset == "imagenet2012":
     train_set = tv.datasets.ImageFolder(pjoin(args.datadir, "train"), train_tx)
     valid_set = tv.datasets.ImageFolder(pjoin(args.datadir, "val"), val_tx)
+
   # TODO: Define custom dataloading logic here for custom datasets
   elif args.dataset == "web":
-    train_set = GetLoader(img_folder='./data/first_round_3k3k/credential',
-                          annot_path='./data/first_round_3k3k/all_coords.txt',
-                          transform=train_tx)
+    train_set = GetLoader(img_folder='./data/first_round_3k3k/all_imgs',
+                          annot_path='./data/first_round_3k3k/all_coords.txt')
 
-    valid_set = GetLoader(img_folder='./data/first_round_3k3k/credential',
-                          annot_path='./data/first_round_3k3k/all_coords.txt',
-                          transform=val_tx)
+    valid_set = GetLoader(img_folder='./data/first_round_3k3k/all_imgs',
+                          annot_path='./data/first_round_3k3k/all_coords.txt')
   else:
     raise ValueError(f"Sorry, we have not spent time implementing the "
                      f"{args.dataset} dataset in the PyTorch codebase. "
@@ -124,12 +123,13 @@ def run_eval(model, data_loader, device, chrono, logger, step):
   logger.info("Running validation...")
   logger.flush()
 
-  all_c, all_top1, all_top5 = [], [], []
+  # all_c, all_top1, all_top5 = [], [], []
+  all_c, all_top1 = [], []
   end = time.time()
   for b, (x, y) in enumerate(data_loader):
     with torch.no_grad():
-      x = x.to(device, non_blocking=True)
-      y = y.to(device, non_blocking=True)
+      x = x.to(device, non_blocking=True, dtype=torch.float)
+      y = y.to(device, non_blocking=True, dtype=torch.long)
 
       # measure data loading time
       chrono._done("eval load", time.time() - end)
@@ -138,20 +138,22 @@ def run_eval(model, data_loader, device, chrono, logger, step):
       with chrono.measure("eval fprop"):
         logits = model(x)
         c = torch.nn.CrossEntropyLoss(reduction='none')(logits, y)
-        top1, top5 = topk(logits, y, ks=(1, 5))
+        # top1, top5 = topk(logits, y, ks=(1, 5))
+        top1 = topk(logits, y)
         all_c.extend(c.cpu())  # Also ensures a sync point.
         all_top1.extend(top1.cpu())
-        all_top5.extend(top5.cpu())
+        # all_top5.extend(top5.cpu())
 
     # measure elapsed time
     end = time.time()
 
   model.train()
   logger.info(f"Validation@{step} loss {np.mean(all_c):.5f}, "
-              f"top1 {np.mean(all_top1):.2%}, "
-              f"top5 {np.mean(all_top5):.2%}")
+              f"top1 {np.mean(all_top1):.2%}, ")
+              # f"top5 {np.mean(all_top5):.2%}")
   logger.flush()
-  return all_c, all_top1, all_top5
+  return all_c, all_top1
+  # return all_c, all_top1, all_top5
 
 
 def mixup_data(x, y, l):
@@ -179,12 +181,12 @@ def main(args):
 
   train_set, valid_set, train_loader, valid_loader = mktrainval(args, logger)
 
-  logger.info(f"Loading model from {args.model}.npz")
+  # logger.info(f"Loading model from {args.model}.npz")
   model = models.KNOWN_MODELS[args.model](head_size=len(valid_set.classes), zero_head=True)
-  model.load_from(np.load(f"{args.model}.npz"))
+  # model.load_from(np.load(f"{args.model}.npz"))
 
-  logger.info("Moving model onto all GPUs")
-  model = torch.nn.DataParallel(model)
+  # logger.info("Moving model onto all GPUs")
+  # model = torch.nn.DataParallel(model)
 
   # Optionally resume from a checkpoint.
   # Load it to CPU first as we'll move the model to GPU later.
@@ -196,11 +198,13 @@ def main(args):
 
   # If pretrained weights are specified
   if args.weights_path:
-    logger.info(f"Loading weights from {args.weights_path}")
+    # logger.info(f"Loading weights from {args.weights_path}")
     checkpoint = torch.load(args.weights_path, map_location="cpu")
     # New task might have different classes; remove the pretrained classifier weights
-    del checkpoint['model']['module.head.conv.weight']
-    del checkpoint['model']['module.head.conv.bias']
+    del checkpoint['model']['module.head.fc1.weight']
+    del checkpoint['model']['module.head.fc1.bias']
+    del checkpoint['model']['module.head.fc2.weight']
+    del checkpoint['model']['module.head.fc2.bias']
     model.load_state_dict(checkpoint["model"], strict=False)
 
   # Resume fine-tuning if we find a saved model.
@@ -221,13 +225,13 @@ def main(args):
   optim.zero_grad()
 
   model.train()
-  mixup = bit_hyperrule.get_mixup(len(train_set))
+  # mixup = bit_hyperrule.get_mixup(len(train_set))
   cri = torch.nn.CrossEntropyLoss().to(device)
 
   logger.info("Starting training!")
   chrono = lb.Chrono()
   accum_steps = 0
-  mixup_l = np.random.beta(mixup, mixup) if mixup > 0 else 1
+  # mixup_l = np.random.beta(mixup, mixup) if mixup > 0 else 1
   end = time.time()
 
   with lb.Uninterrupt() as u:
@@ -239,8 +243,10 @@ def main(args):
         break
 
       # Schedule sending to GPU(s)
-      x = x.to(device, non_blocking=True)
-      y = y.to(device, non_blocking=True)
+      print(x.shape)
+      print(y.shape)
+      x = x.to(device, non_blocking=True, dtype=torch.float)
+      y = y.to(device, non_blocking=True, dtype=torch.long)
 
       # Update learning-rate, including stop training if over.
       lr = bit_hyperrule.get_lr(step, len(train_set), args.base_lr)
@@ -249,16 +255,16 @@ def main(args):
       for param_group in optim.param_groups:
         param_group["lr"] = lr
 
-      if mixup > 0.0:
-        x, y_a, y_b = mixup_data(x, y, mixup_l)
+      # if mixup > 0.0:
+      #   x, y_a, y_b = mixup_data(x, y, mixup_l)
 
       # compute output
       with chrono.measure("fprop"):
         logits = model(x)
-        if mixup > 0.0:
-          c = mixup_criterion(cri, logits, y_a, y_b, mixup_l)
-        else:
-          c = cri(logits, y)
+        # if mixup > 0.0:
+        #   c = mixup_criterion(cri, logits, y_a, y_b, mixup_l)
+        # else:
+        c = cri(logits, y)
         c_num = float(c.data.cpu().numpy())  # Also ensures a sync point.
 
       # Accumulate grads
@@ -267,7 +273,7 @@ def main(args):
         accum_steps += 1
 
       accstep = f" ({accum_steps}/{args.batch_split})" if args.batch_split > 1 else ""
-      logger.info(f"[step {step}{accstep}]: loss={c_num:.5f} (lr={lr:.1e})")  # pylint: disable=logging-format-interpolation
+      logger.info(f"[step {step}{accstep}]: loss={c_num:.5f} (lr={lr})")  # pylint: disable=logging-format-interpolation
       logger.flush()
 
       # Update params
@@ -278,11 +284,11 @@ def main(args):
         step += 1
         accum_steps = 0
         # Sample new mixup ratio for next batch
-        mixup_l = np.random.beta(mixup, mixup) if mixup > 0 else 1
+        # mixup_l = np.random.beta(mixup, mixup) if mixup > 0 else 1
 
         # Run evaluation and save the model.
         if args.eval_every and step % args.eval_every == 0:
-          run_eval(model, valid_loader, device, chrono, logger, step)
+          run_eval(model, valid_loader, device, chrono, logger, step)  # TODO: Final eval at end of training.
           if args.save:
             torch.save({
                 "step": step,
@@ -292,8 +298,8 @@ def main(args):
 
       end = time.time()
 
-    # Final eval at end of training.
-    run_eval(model, valid_loader, device, chrono, logger, step='end')
+    # TODO: Final eval at end of training.
+    # run_eval(model, valid_loader, device, chrono, logger, step='end')
 
   logger.info(f"Timings:\n{chrono}")
 
@@ -302,7 +308,7 @@ if __name__ == "__main__":
   parser = bit_common.argparser(models.KNOWN_MODELS.keys())
   # parser.add_argument("--datadir", required=True,
   #                     help="Path to the ImageNet data folder, preprocessed for torchvision.")
-  parser.add_argument("--workers", type=int, default=8,
+  parser.add_argument("--workers", type=int, default=0,
                       help="Number of background threads used to load data.")
   parser.add_argument("--no-save", dest="save", action="store_false")
   main(parser.parse_args())
