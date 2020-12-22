@@ -28,15 +28,15 @@ def read_txt(txt_file: str):
 
     contents = [x.strip() for x in open(txt_file).readlines()]
     paths = [x.split('\t')[0] for x in contents]
-    num_imgs = len(set(paths))
-    classes = [x.split('\t')[2] for x in contents]
-    labels = [x.split('\t')[-1] for x in contents]
     coordinates = [x.split('\t')[1] for x in contents]
-    preprocess_coordinates = []
+    types = [x.split('\t')[2] for x in contents]
+    classes = [x.split('\t')[3] for x in contents]
+    num_imgs = len(set(paths))
 
+    preprocess_coordinates = []
     for coord in coordinates:
         x1, y1, x2, y2 = list(map(float, re.search(r'\((.*?)\)', coord).group(1).split(",")))
         preprocess_coordinates.append([x1, y1, x2, y2])
 
-    assert (len(preprocess_coordinates) == len(classes)) & (len(paths) == len(preprocess_coordinates)) & (len(labels) == len(classes))
-    return num_imgs, labels, paths, preprocess_coordinates, classes
+    assert (len(preprocess_coordinates) == len(classes)) & (len(paths) == len(preprocess_coordinates)) & (len(types) == len(classes))
+    return num_imgs, classes, paths, preprocess_coordinates, types

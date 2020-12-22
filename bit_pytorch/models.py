@@ -215,22 +215,39 @@ class CNNCustomize(nn.Module):
     return x
 
 class FCCustomize(nn.Module):
-    def __init__(self, input_ch_size=9, head_size=21843, zero_head=False):
+    def __init__(self, input_ch_size=9, grid_num=10, head_size=2):
         super(FCCustomize, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=input_ch_size, out_channels=6, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(in_channels=6, out_channels=8, kernel_size=3, padding=1)
-        self.fc1 = nn.Linear(8 * 10 * 10, 64)
-        self.fc2 = nn.Linear(64, 32)
-        self.fc3 = nn.Linear(32, head_size)
+        self.pool = nn.AvgPool2d(kernel_size=2, stride=1)
+        self.fc1 = nn.Linear(input_ch_size * (grid_num-1) * (grid_num-1), 32)
+        self.fc2 = nn.Linear(32, 16)
+        self.fc3 = nn.Linear(16, head_size)
+        self.grid_num = grid_num
+        self.input_ch_size = input_ch_size
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = x.view(-1, 8 * 10 * 10)
+        x = self.pool(x)
+        x = x.view(-1, self.input_ch_size * (self.grid_num-1) * (self.grid_num-1))
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
+
+class FCSimple(nn.Module):
+    def __init__(self, input_ch_size=9, grid_num=10, head_size=2):
+        super(FCSimple, self).__init__()
+        self.fc1 = nn.Linear(input_ch_size * grid_num * grid_num, 32)
+        self.fc2 = nn.Linear(32, 16)
+        self.fc3 = nn.Linear(16, head_size)
+        self.grid_num = grid_num
+        self.input_ch_size = input_ch_size
+
+    def forward(self, x):
+        x = x.view(-1, self.input_ch_size * self.grid_num * self.grid_num)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+
 
 KNOWN_MODELS = OrderedDict([
     ('BiT-M-R50x1', lambda *a, **kw: ResNetV2([3, 4, 6, 3], 1, *a, **kw)),
@@ -246,7 +263,8 @@ KNOWN_MODELS = OrderedDict([
     ('BiT-S-R152x2', lambda *a, **kw: ResNetV2([3, 8, 36, 3], 2, *a, **kw)),
     ('BiT-S-R152x4', lambda *a, **kw: ResNetV2([3, 8, 36, 3], 4, *a, **kw)),
     ('CNN', lambda *a, **kw: CNNCustomize(*a, **kw)),
-    ('FC', lambda *a, **kw: FCCustomize(*a, **kw))
+    ('FCCustomize', lambda *a, **kw: FCCustomize(*a, **kw)),
+    ('FCSimple', lambda *a, **kw: FCSimple(*a, **kw))
 ])
 
 if __name__ == '__main__':

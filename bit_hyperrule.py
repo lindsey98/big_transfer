@@ -43,8 +43,6 @@ def get_mixup(dataset_size):
 
 # Not used
 def get_schedule(dataset_size):
-  if dataset_size < 5000:
-    return [50, 100, 150, 200, 250]
   if dataset_size < 20_000:
     return [100, 200, 300, 400, 500]
   elif dataset_size < 500_000:
@@ -65,7 +63,7 @@ def get_lr(step, dataset_size, base_lr=0.003):
     return None
   # Staircase decays by factor of 10
   else:
-    for s in supports[1:]:
+    for s in supports:
       if s < step:
         base_lr /= 10
     return base_lr
