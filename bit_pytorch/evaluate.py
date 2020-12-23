@@ -4,13 +4,14 @@ import numpy as np
 import bit_pytorch.models as models
 from bit_pytorch.dataloader import GetLoader
 
-def evaluate(model, val_loader):
+def evaluate(model, train_loader):
+
     model.eval()
     num_ones = 0
     num_zeros = 0
     pred_vec = []
     with torch.no_grad():
-        for b, (x, y) in enumerate(val_loader):
+        for b, (x, y) in enumerate(train_loader):
             x = x.to(device, non_blocking=True, dtype=torch.float)
             y = y.to(device, non_blocking=True, dtype=torch.long)
 
@@ -20,10 +21,8 @@ def evaluate(model, val_loader):
             pred_vec.extend(preds)
             num_ones += np.sum(preds == 1)
             num_zeros += np.sum(preds == 0)
-            print(num_ones, num_zeros)
-
-    print(num_ones, len(val_loader))
-    print(num_zeros, len(val_loader))
+            print("GT:", y)
+            print("Pred:", pred_vec)
 
     return pred_vec
 

@@ -27,7 +27,7 @@ known_dataset_sizes = {
   # TODO: Specify image size of custom dataset here
   'logo_2k': (95, 95),
   'targetlist': (95, 95),
-  'web':(10, 10),
+  'web':(10, 10)
 }
 
 
@@ -44,26 +44,24 @@ def get_mixup(dataset_size):
 # Not used
 def get_schedule(dataset_size):
   if dataset_size < 20_000:
-    return [100, 200, 300, 400, 500]
+    return [600, 1500, 2000]
   elif dataset_size < 500_000:
     return [500, 3000, 6000, 9000, 10_000]
   else:
     return [500, 6000, 12_000, 18_000, 20_000]
 
 
-def get_lr(step, dataset_size, base_lr=0.003):
+def get_lr(step, dataset_size, base_lr):
   """Returns learning-rate for `step` or None at the end."""
   supports = get_schedule(dataset_size)
-  # Linear warmup: not used
   if step < supports[0]:
     return base_lr
-    # return base_lr * step / supports[0]
   # End of training
   elif step >= supports[-1]:
     return None
   # Staircase decays by factor of 10
   else:
-    for s in supports:
+    for s in supports[1:]:
       if s < step:
         base_lr /= 10
     return base_lr
