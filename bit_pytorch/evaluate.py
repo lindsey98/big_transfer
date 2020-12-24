@@ -7,9 +7,10 @@ from bit_pytorch.dataloader import GetLoader
 def evaluate(model, train_loader):
 
     model.eval()
-    num_ones = 0
-    num_zeros = 0
-    pred_vec = []
+    # num_ones = 0
+    # num_zeros = 0
+    correct = 0
+    total = 0
     with torch.no_grad():
         for b, (x, y) in enumerate(train_loader):
             x = x.to(device, non_blocking=True, dtype=torch.float)
@@ -17,25 +18,27 @@ def evaluate(model, train_loader):
 
             # Compute output, measure accuracy
             logits = model(x)
-            preds = torch.argmax(logits, dim=1).detach().cpu().numpy()
-            pred_vec.extend(preds)
-            num_ones += np.sum(preds == 1)
-            num_zeros += np.sum(preds == 0)
+            preds = torch.argmax(logits, dim=1)
+            correct += preds.eq(y).sum().item()
+            total += len(logits)
+            # num_ones += np.sum(preds == 1)
+            # num_zeros += np.sum(preds == 0)
             print("GT:", y)
-            print("Pred:", pred_vec)
+            print("Pred:", preds)
+            print(correct, total)
 
-    return pred_vec
+    return float(correct/total)
 
 if __name__ == '__main__':
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    model = models.KNOWN_MODELS['FCCustomize'](head_size=2, grid_num=10)
-    checkpoint = torch.load('./output/website/bit.pth.tar', map_location="cpu")
+    model = models.KNOWN_MODELS['FCMax'](head_size=2, grid_num=10)
+    checkpoint = torch.load('./output/website/FCMax.pth.tar', map_location="cpu")
     model.load_state_dict(checkpoint["model"])
     model.to(device)
 
-    train_set = GetLoader(img_folder='./data/first_round_3k3k/all_imgs',
-                          annot_path='./data/first_round_3k3k/all_coords.txt')
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=512, drop_last=False, shuffle=False)
+    val_set = GetLoader(img_folder='./data/val_imgs',
+                        annot_path='./data/val_coords.txt')
+    val_loader = torch.utils.data.DataLoader(val_set, batch_size=512, drop_last=False, shuffle=False)
 
-    pred_vec = evaluate(model, train_loader)
-    print(pred_vec)
+    acc = evaluate(model, val_loader)
+    print(acc)

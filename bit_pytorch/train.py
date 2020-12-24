@@ -99,7 +99,7 @@ def run_eval(model, data_loader, device, logger, step):
 
 
 def main(args):
-  writer = SummaryWriter(os.path.join(args.logdir, args.name, 'tensorboard_write_%s'%args.model), flush_secs=60)
+  writer = SummaryWriter(os.path.join(args.logdir, args.name, 'tensorboard_write_{}_{}'.format(args.model, str(args.base_lr))), flush_secs=60)
   logger = bit_common.setup_logger(args)
 
   # Lets cuDNN benchmark conv implementations and choose the fastest.
@@ -117,21 +117,25 @@ def main(args):
   optim = torch.optim.SGD(model.parameters(), lr=args.base_lr, momentum=0.9)
 
   # Resume fine-tuning if we find a saved model.
-  savename = pjoin(args.logdir, args.name, "%s.pth.tar"%args.model)
-  # try:
-  #   logger.info(f"Model will be saved in '{savename}'")
-  #   checkpoint = torch.load(savename, map_location="cpu")
-  #   logger.info(f"Found saved model to resume from at '{savename}'")
-  #   step = checkpoint["step"]
-  #   model.load_state_dict(checkpoint["model"])
-  #   optim.load_state_dict(checkpoint["optim"])
-  #   logger.info(f"Resumed at step {step}")
-  # except FileNotFoundError:
-  #   logger.info("Training from scratch")
+  savename = pjoin(args.logdir, args.name, "{}_{}.pth.tar".format(args.model, str(args.base_lr)))
+  try:
+    checkpoint = torch.load(savename, map_location="cpu")
+    logger.info(f"Found saved model to resume from at '{savename}'")
+    step = checkpoint["step"]
+    model.load_state_dict(checkpoint["model"])
+    optim.load_state_dict(checkpoint["optim"])
+    logger.info(f"Resumed at step {step}")
+  except FileNotFoundError:
+    logger.info("Training from scratch")
 
   # Print out the model summary
   model = model.to(device)
   summary(model, (9, 10, 10))
+
+  # Add model graph
+  dummy_input = torch.rand(1, 9, 10, 10)
+  writer.add_graph(model, dummy_input)
+  writer.flush()
 
   # Start training
   model.train()
@@ -148,6 +152,7 @@ def main(args):
   logger.info("Starting training!")
 
   for x, y in recycle(train_loader):
+
     print('Batch input shape:', x.shape)
     print('Batch target shape:', y.shape)
     writer.add_histogram('model.input', x.data, step)
@@ -198,7 +203,6 @@ def main(args):
     writer.add_histogram('model.fc3.grad', model.fc3.weight.grad.data, step)
     writer.flush()
 
-
     # Get train_acc every 1 epoch
     if step % (len(train_set)//args.batch) == 0:
       correct_rate = run_eval(model, valid_loader, device, logger, step)
@@ -207,6 +211,7 @@ def main(args):
 
       # Save model at best validation accuracy
       if correct_rate > best_correct_rate:
+        logger.info(f'Save model at step {step} or epoch {step // (len(train_set)//args.batch)}')
         torch.save({
           "step": step,
           "model": model.state_dict(),

@@ -54,6 +54,7 @@ def get_schedule(dataset_size):
 def get_lr(step, dataset_size, base_lr):
   """Returns learning-rate for `step` or None at the end."""
   supports = get_schedule(dataset_size)
+  # Do not use learning rate warmup
   if step < supports[0]:
     return base_lr
   # End of training
