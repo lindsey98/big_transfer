@@ -70,34 +70,35 @@ if __name__ == '__main__':
     test_set = GetLoader(img_folder='./data/val_imgs',
                          annot_path='./data/val_coords.txt')
 
-    # print(train_set.clscount)
+    print(len(train_set))
+    print(len(test_set))
     train_loader = torch.utils.data.DataLoader(
         train_set, batch_size=32, drop_last=False, shuffle=False)
 
     val_loader = torch.utils.data.DataLoader(
         test_set, batch_size=32, drop_last=False, shuffle=False)
 
-    from bit_pytorch.train import recycle
-    for x, y in recycle(train_loader):
-        print(y)
-
-    # print(len(train_set))
-    for x, y in train_loader:
-        # print(x)
-        print(x.shape)
-        print(y)
-        break
-
-    for x, y in val_loader:
-        # print(x)
-        print(x.shape)
-        print(y)
-        break
-
-
-    #     plt.imshow(Image.open(os.path.join('./data/first_round_3k3k/all_imgs', file_path[0]+'.png')))
-    #     plt.show()
-    #     break
-    #     print(x)
+    # from bit_pytorch.train import recycle
+    # for x, y in recycle(train_loader):
+    #     print(y)
+    #
+    # # print(len(train_set))
+    # for x, y in train_loader:
+    #     # print(x)
+    #     print(x.shape)
     #     print(y)
     #     break
+    #
+    # for x, y in val_loader:
+    #     # print(x)
+    #     print(x.shape)
+    #     print(y)
+    #     break
+    #
+    #
+    # #     plt.imshow(Image.open(os.path.join('./data/first_round_3k3k/all_imgs', file_path[0]+'.png')))
+    # #     plt.show()
+    # #     break
+    # #     print(x)
+    # #     print(y)
+    # #     break

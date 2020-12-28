@@ -6,7 +6,7 @@ import os
 import shutil
 
 def read_xml(xml_file: str):
-
+    '''read xml file'''
     tree = ET.parse(xml_file)
     root = tree.getroot()
 
@@ -29,7 +29,7 @@ def read_xml(xml_file: str):
     return list_with_all_types, list_with_all_boxes
 
 def read_txt(txt_file: str):
-
+    '''read coordinate txt file'''
     contents = [x.strip() for x in open(txt_file).readlines()]
     paths = [x.split('\t')[0] for x in contents]
     coordinates = [x.split('\t')[1] for x in contents]
@@ -46,7 +46,7 @@ def read_txt(txt_file: str):
     return num_imgs, classes, paths, preprocess_coordinates, types
 
 def split_data(txt_file: str, test_ratio: float):
-
+    '''Train test split'''
     classes_dict = {'credential': 0, 'noncredential': 1}
     num_imgs, classes, paths, preprocess_coordinates, types = read_txt(txt_file)
     all_image_file = paths
@@ -75,50 +75,52 @@ def split_data(txt_file: str, test_ratio: float):
 
 
 if __name__ == '__main__':
-    # train_image_files, val_image_files, _, _ = split_data('./data/first_round_3k3k/all_coords.txt', test_ratio=0.1)
+    train_image_files, val_image_files, _, _ = split_data('./data/all_coords.txt', test_ratio=0.1)
 
     train_img_folder = './data/train_imgs'
     # shutil.rmtree(train_img_folder)
-    # os.makedirs(train_img_folder, exist_ok=True)
+    os.makedirs(train_img_folder, exist_ok=True)
     val_img_folder = './data/val_imgs'
     # shutil.rmtree(val_img_folder)
-    # os.makedirs(val_img_folder, exist_ok=True)
+    os.makedirs(val_img_folder, exist_ok=True)
 
     train_annot_file = './data/train_coords.txt'
     val_annot_file = './data/val_coords.txt'
 
     # Copy images over
     # for file in train_image_files:
-    #     shutil.copyfile('./data/first_round_3k3k/all_imgs/'+file+'.png',
-    #                     os.path.join(train_img_folder, file+'.png'))
+        # shutil.copyfile('./data/first_round_3k3k/all_imgs/'+file+'.png',
+        #                 os.path.join(train_img_folder, file+'.png'))
 
     # for file in val_image_files:
     #     shutil.copyfile('./data/first_round_3k3k/all_imgs/'+file+'.png',
     #                     os.path.join(val_img_folder, file+'.png'))
 
+    print('Number of training images {}'.format(len(os.listdir(train_img_folder))))
+    print('Number of validation images {}'.format(len(os.listdir(val_img_folder))))
 
-    # for file in os.listdir(train_img_folder):
-    #     try:
-    #         types, boxes = read_xml(os.path.join('./data/first_round_3k3k/credential_xml', file.replace('.png', '.xml')))
-    #         label = 'credential'
-    #     except:
-    #         types, boxes = read_xml(os.path.join('./data/first_round_3k3k/noncredential_xml', file.replace('.png', '.xml')))
-    #         label = 'noncredential'
-    #
-    #     for j in range(len(types)):
-    #         with open(train_annot_file, 'a+') as f:
-    #             f.write(file.split('.png')[0] + '\t')
-    #             f.write('(' + ','.join(list(map(str, boxes[j]))) + ')' + '\t')
-    #             f.write(types[j] + '\t')
-    #             f.write(label + '\n')
+    for file in os.listdir(train_img_folder):
+        try:
+            types, boxes = read_xml(os.path.join('./data/credential_xml', file.replace('.png', '.xml')))
+            label = 'credential'
+        except:
+            types, boxes = read_xml(os.path.join('./data/noncredential_xml/noncredential_xml', file.replace('.png', '.xml')))
+            label = 'noncredential'
+
+        for j in range(len(types)):
+            with open(train_annot_file, 'a+') as f:
+                f.write(file.split('.png')[0] + '\t')
+                f.write('(' + ','.join(list(map(str, boxes[j]))) + ')' + '\t')
+                f.write(types[j] + '\t')
+                f.write(label + '\n')
 
 
     for file in os.listdir(val_img_folder):
         try:
-            types, boxes = read_xml(os.path.join('./data/first_round_3k3k/credential_xml', file.replace('.png', '.xml')))
+            types, boxes = read_xml(os.path.join('./data/credential_xml', file.replace('.png', '.xml')))
             label = 'credential'
         except:
-            types, boxes = read_xml(os.path.join('./data/first_round_3k3k/noncredential_xml', file.replace('.png', '.xml')))
+            types, boxes = read_xml(os.path.join('./data/noncredential_xml/noncredential_xml', file.replace('.png', '.xml')))
             label = 'noncredential'
 
         for j in range(len(types)):

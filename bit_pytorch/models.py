@@ -310,9 +310,8 @@ KNOWN_MODELS = OrderedDict([
     ('FCSimple', lambda *a, **kw: FCSimple(*a, **kw))
 ])
 
-if __name__ == '__main__':
-    from torchsummary import summary
-    model = KNOWN_MODELS['FC'](head_size=2, zero_head=True)
-    model.to('cuda:0')
-    print(model.fc1.weight.data)
-    # summary(model, (9, 20, 20))
+# if __name__ == '__main__':
+#     from torchsummary import summary
+#     model = KNOWN_MODELS['FCMax'](head_size=2)
+#     model.to('cuda:0')
+#     summary(model, (9, 10, 10))

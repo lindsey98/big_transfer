@@ -118,22 +118,22 @@ def main(args):
 
   # Resume fine-tuning if we find a saved model.
   savename = pjoin(args.logdir, args.name, "{}_{}.pth.tar".format(args.model, str(args.base_lr)))
-  try:
-    checkpoint = torch.load(savename, map_location="cpu")
-    logger.info(f"Found saved model to resume from at '{savename}'")
-    step = checkpoint["step"]
-    model.load_state_dict(checkpoint["model"])
-    optim.load_state_dict(checkpoint["optim"])
-    logger.info(f"Resumed at step {step}")
-  except FileNotFoundError:
-    logger.info("Training from scratch")
+  # try:
+  #   checkpoint = torch.load(savename, map_location="cpu")
+  #   logger.info(f"Found saved model to resume from at '{savename}'")
+  #   step = checkpoint["step"]
+  #   model.load_state_dict(checkpoint["model"])
+  #   optim.load_state_dict(checkpoint["optim"])
+  #   logger.info(f"Resumed at step {step}")
+  # except FileNotFoundError:
+  #   logger.info("Training from scratch")
 
   # Print out the model summary
   model = model.to(device)
   summary(model, (9, 10, 10))
 
   # Add model graph
-  dummy_input = torch.rand(1, 9, 10, 10)
+  dummy_input = torch.rand(1, 9, 10, 10, device=device)
   writer.add_graph(model, dummy_input)
   writer.flush()
 

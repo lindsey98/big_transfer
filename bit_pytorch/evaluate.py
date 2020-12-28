@@ -32,7 +32,7 @@ def evaluate(model, train_loader):
 if __name__ == '__main__':
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     model = models.KNOWN_MODELS['FCMax'](head_size=2, grid_num=10)
-    checkpoint = torch.load('./output/website/FCMax.pth.tar', map_location="cpu")
+    checkpoint = torch.load('./output/website/FCMax_0.1.pth.tar', map_location="cpu")
     model.load_state_dict(checkpoint["model"])
     model.to(device)
 
