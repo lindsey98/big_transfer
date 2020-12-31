@@ -2,17 +2,15 @@ import torch.utils.data as data
 from PIL import Image, ImageOps
 import pickle
 import numpy as np
-
+import os
 
 class GetLoader(data.Dataset):
     def __init__(self, data_root, data_list, label_dict, transform=None, grayscale=False):
+        
         self.transform = transform
         self.data_root = data_root
         self.grayscale = grayscale
-       # print(self.data_root)
-        f = open(data_list, 'r')
-        data_list = f.readlines()
-        f.close()
+        data_list = [x.strip('\n') for x in open(data_list).readlines()]
 
         with open(label_dict, 'rb') as handle:
             self.label_dict = pickle.load(handle)
@@ -25,26 +23,23 @@ class GetLoader(data.Dataset):
         self.labels = []
 
         for data in data_list:
-            image_path = data.rstrip('\n')
+            image_path = data
             label = image_path.split('/')[0]
             self.img_paths.append(image_path)
             self.labels.append(label)
 
     def __getitem__(self, item):
 
-     #   print(self.data_root)
         img_path, label= self.img_paths[item], self.labels[item]
-        #img_path_full = os.path.join(self.data_root, img_path)
-        img_path_full = self.data_root+img_path
-      #  print(img_path_full)
+        img_path_full = os.path.join(self.data_root, img_path)
         if self.grayscale:
             img = Image.open(img_path_full).convert('L').convert('RGB')
         else:
             img = Image.open(img_path_full).convert('RGB')
 
         img = ImageOps.expand(img, (
-        (max(img.size) - img.size[0]) // 2, (max(img.size) - img.size[1]) // 2,
-        (max(img.size) - img.size[0]) // 2, (max(img.size) - img.size[1]) // 2), fill=(255, 255, 255))
+            (max(img.size) - img.size[0]) // 2, (max(img.size) - img.size[1]) // 2,
+            (max(img.size) - img.size[0]) // 2, (max(img.size) - img.size[1]) // 2), fill=(255, 255, 255))
 
         # label = np.array(label,dtype='float32')
         label = self.label_dict[label]
