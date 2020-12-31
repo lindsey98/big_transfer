@@ -172,6 +172,19 @@ def mixup_data(x, y, l):
 def mixup_criterion(criterion, pred, y_a, y_b, l):
     return l * criterion(pred, y_a) + (1 - l) * criterion(pred, y_b)
 
+def optimizer_to(optim, device):
+    for param in optim.state.values():
+        # Not sure there are any global tensors in the state dict
+        if isinstance(param, torch.Tensor):
+            param.data = param.data.to(device)
+            if param._grad is not None:
+                param._grad.data = param._grad.data.to(device)
+        elif isinstance(param, dict):
+            for subparam in param.values():
+                if isinstance(subparam, torch.Tensor):
+                    subparam.data = subparam.data.to(device)
+                    if subparam._grad is not None:
+                        subparam._grad.data = subparam._grad.data.to(device)
 
 def main(args):
     logger = bit_common.setup_logger(args)
@@ -191,14 +204,14 @@ def main(args):
 
     logger.info("Moving model onto all GPUs")
     model = torch.nn.DataParallel(model)
-
+    
+    # Note: no weight-decay!
+    optim = torch.optim.SGD(model.parameters(), lr=args.base_lr, momentum=0.9)
+    
     # Optionally resume from a checkpoint.
     # Load it to CPU first as we'll move the model to GPU later.
     # This way, we save a little bit of GPU memory when loading.
     step = 0
-
-    # Note: no weight-decay!
-    optim = torch.optim.SGD(model.parameters(), lr=args.base_lr, momentum=0.9)
 
     # If pretrained weights are specified
     if args.weights_path:
@@ -220,10 +233,13 @@ def main(args):
         model.load_state_dict(checkpoint["model"])
         optim.load_state_dict(checkpoint["optim"])
         logger.info("Resumed at step {}".format(step))
+        
     except FileNotFoundError:
         logger.info("Fine-tuning from BiT")
 
     model = model.to(device)
+    # Send to GPU
+    optimizer_to(optim,device)
     optim.zero_grad()
 
     model.train()
@@ -232,7 +248,7 @@ def main(args):
 
     logger.info("Starting training!")
     chrono = lb.Chrono()
-    accum_steps = 0
+
     mixup_l = np.random.beta(mixup, mixup) if mixup > 0 else 1
     end = time.time()
 
@@ -259,39 +275,35 @@ def main(args):
                 x, y_a, y_b = mixup_data(x, y, mixup_l)
 
             # compute output
-            with chrono.measure("fprop"):
-                logits = model(x)
-                if mixup > 0.0:
-                    c = mixup_criterion(cri, logits, y_a, y_b, mixup_l)
-                else:
-                    c = cri(logits, y)
-                c_num = float(c.data.cpu().numpy())    # Also ensures a sync point.
+            logits = model(x)
+            if mixup > 0.0:
+                c = mixup_criterion(cri, logits, y_a, y_b, mixup_l)
+            else:
+                c = cri(logits, y)
+            c_num = float(c.data.cpu().numpy())    # Also ensures a sync point.
 
             # Accumulate grads
-            with chrono.measure("grads"):
-                (c / args.batch_split).backward()
-                accum_steps += 1
+            (c / args.batch_split).backward()
 
-            accstep = " ({}/{})".format(accum_steps, args.batch_split) if args.batch_split > 1 else ""
-            logger.info("[step {}{}]: loss={:.5f} (lr={:.1e})".format(step, accstep, c_num, lr))    
+            logger.info("[step {}]: loss={:.5f} (lr={:.1e})".format(step, c_num, lr))    
             logger.flush()
 
             # Update params
-            with chrono.measure("update"):
-                optim.step()
-                optim.zero_grad()
+            optim.step()
+            optim.zero_grad()
             step += 1
-            accum_steps = 0
+
             # Sample new mixup ratio for next batch
             mixup_l = np.random.beta(mixup, mixup) if mixup > 0 else 1
 
 
             end = time.time()
-            torch.save({
-                "step": step,
-                "model": model.state_dict(),
-                "optim" : optim.state_dict(),
-            }, savename)
+            if step % 50 == 0:
+                torch.save({
+                    "step": step,
+                    "model": model.state_dict(),
+                    "optim" : optim.state_dict(),
+                }, savename)
 
         # Final eval at end of training.
         run_eval(model, valid_loader, device, chrono, logger, step='end')
@@ -302,8 +314,6 @@ def main(args):
 
 if __name__ == "__main__":
     parser = bit_common.argparser(models.KNOWN_MODELS.keys())
-    # parser.add_argument("--datadir", required=True,
-    #                                         help="Path to the ImageNet data folder, preprocessed for torchvision.")
     parser.add_argument("--workers", type=int, default=8,
                                             help="Number of background threads used to load data.")
     parser.add_argument("--no-save", dest="save", action="store_false")
