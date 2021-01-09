@@ -127,7 +127,7 @@ def cls_avg_heatmaps(cls, dataset):
 if __name__ == '__main__':
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     model = models.KNOWN_MODELS['FCMax'](head_size=2, grid_num=10)
-    checkpoint = torch.load('./output/website/FCMax_0.05.pth.tar', map_location="cpu")
+    checkpoint = torch.load('./output/website/FCMax_0.1.pth.tar', map_location="cpu")
     model.load_state_dict(checkpoint["model"])
     model.to(device)
 
@@ -135,8 +135,8 @@ if __name__ == '__main__':
                         annot_path='./data/val_coords.txt')
     val_loader = torch.utils.data.DataLoader(val_set, batch_size=1, drop_last=False, shuffle=False)
 
-    # avg_heatmaps = cls_avg_heatmaps(0, val_set)
-    # print(avg_heatmaps)
+    avg_heatmaps = cls_avg_heatmaps(0, val_set)
+    print(avg_heatmaps)
     evaluate_special(model, val_set)
     # acc = evaluate(model, val_loader)
     # print(acc)

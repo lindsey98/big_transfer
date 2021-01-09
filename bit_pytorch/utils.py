@@ -88,13 +88,13 @@ if __name__ == '__main__':
     val_annot_file = './data/val_coords.txt'
 
     # Copy images over
-    # for file in train_image_files:
-        # shutil.copyfile('./data/first_round_3k3k/all_imgs/'+file+'.png',
-        #                 os.path.join(train_img_folder, file+'.png'))
+    for file in train_image_files:
+        shutil.copyfile('./data/all_imgs/'+file+'.png',
+                        os.path.join(train_img_folder, file+'.png'))
 
-    # for file in val_image_files:
-    #     shutil.copyfile('./data/first_round_3k3k/all_imgs/'+file+'.png',
-    #                     os.path.join(val_img_folder, file+'.png'))
+    for file in val_image_files:
+        shutil.copyfile('./data/all_imgs/'+file+'.png',
+                        os.path.join(val_img_folder, file+'.png'))
 
     print('Number of training images {}'.format(len(os.listdir(train_img_folder))))
     print('Number of validation images {}'.format(len(os.listdir(val_img_folder))))
@@ -104,7 +104,7 @@ if __name__ == '__main__':
             types, boxes = read_xml(os.path.join('./data/credential_xml', file.replace('.png', '.xml')))
             label = 'credential'
         except:
-            types, boxes = read_xml(os.path.join('./data/noncredential_xml/noncredential_xml', file.replace('.png', '.xml')))
+            types, boxes = read_xml(os.path.join('./data/noncredential_xml', file.replace('.png', '.xml')))
             label = 'noncredential'
 
         for j in range(len(types)):
@@ -120,7 +120,7 @@ if __name__ == '__main__':
             types, boxes = read_xml(os.path.join('./data/credential_xml', file.replace('.png', '.xml')))
             label = 'credential'
         except:
-            types, boxes = read_xml(os.path.join('./data/noncredential_xml/noncredential_xml', file.replace('.png', '.xml')))
+            types, boxes = read_xml(os.path.join('./data/noncredential_xml', file.replace('.png', '.xml')))
             label = 'noncredential'
 
         for j in range(len(types)):
